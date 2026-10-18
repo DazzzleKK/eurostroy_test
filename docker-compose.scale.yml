@@ -1,0 +1,27 @@
+name: eurostroy
+
+# Надстройка для запуска в несколько инстансов.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d \
+#     --scale backend=3 --scale frontend=2
+#
+# Порты backend и frontend снимаются, наружу смотрит только nginx:8080.
+# Один публичный адрес пригодится и для вебхука, и для Mini App.
+
+services:
+  backend:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped

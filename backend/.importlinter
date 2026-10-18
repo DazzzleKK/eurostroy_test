@@ -1,0 +1,37 @@
+[importlinter]
+root_package = eurostroy
+
+[importlinter:contract:domain-is-pure]
+name = Domain does not depend on outer layers
+type = forbidden
+source_modules =
+    eurostroy.domain
+forbidden_modules =
+    eurostroy.application
+    eurostroy.infrastructure
+    eurostroy.api
+    eurostroy.composition
+    eurostroy.config
+    eurostroy.cli
+    eurostroy.main
+
+[importlinter:contract:application-isolated]
+name = Application knows only domain
+type = forbidden
+source_modules =
+    eurostroy.application
+forbidden_modules =
+    eurostroy.infrastructure
+    eurostroy.api
+    eurostroy.composition
+    eurostroy.cli
+    eurostroy.main
+
+[importlinter:contract:infrastructure-isolated]
+name = Infrastructure does not know transport and wiring
+type = forbidden
+source_modules =
+    eurostroy.infrastructure
+forbidden_modules =
+    eurostroy.api
+    eurostroy.composition

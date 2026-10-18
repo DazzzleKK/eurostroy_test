@@ -1,0 +1,106 @@
+name: eurostroy
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-catalog}:${POSTGRES_PASSWORD:-catalog}@postgres:5432/${POSTGRES_DB:-catalog}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+  DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-10}
+  S3_ENDPOINT: minio:9000
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  S3_BUCKET: ${S3_BUCKET:-catalog}
+  S3_SECURE: "false"
+  S3_REGION: ${S3_REGION:-us-east-1}
+  BOT_TOKEN: ${BOT_TOKEN:-}
+  BOT_WEBHOOK_SECRET: ${BOT_WEBHOOK_SECRET:-change-me}
+  PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+  WEBAPP_URL: ${WEBAPP_URL:-http://localhost:3000}
+  ADMIN_IDS: ${ADMIN_IDS:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-catalog}
+      POSTGRES_USER: ${POSTGRES_USER:-catalog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-catalog}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-catalog} -d ${POSTGRES_DB:-catalog}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  minio:
+    # В этом окружении официальный образ minio/minio из Docker Hub недоступен,
+    # поэтому взят тот же сервер MinIO из legacy-сборки Bitnami.
+    # При доступном официальном образе достаточно заменить строку image на
+    # minio/minio:latest и вернуть command/volume из комментария ниже:
+    #   command: server /data --console-address ":9001"
+    #   volumes: minio-data:/data
+    image: bitnamilegacy/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/bitnami/minio/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+  backend-init:
+    build: ./backend
+    image: eurostroy-backend:local
+    command: >
+      sh -c "python -m eurostroy.cli wait-deps
+      && alembic upgrade head
+      && python -m eurostroy.cli ensure-bucket"
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: "no"
+
+  backend:
+    build: ./backend
+    image: eurostroy-backend:local
+    environment: *backend-env
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      backend-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/healthz', timeout=3).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  minio-data:

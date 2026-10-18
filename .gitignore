@@ -1,0 +1,32 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# env and secrets
+.env
+.env.local
+*.pem
+
+# local data
+data/
+minio-data/
+pgdata/
+.idea/
+.vscode/
+.DS_Store
